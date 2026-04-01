@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Cipher — Text Encryption</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0b;
+    --surface: #111113;
+    --surface2: #18181c;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.15);
+    --accent: #c8f135;
+    --accent-dim: rgba(200,241,53,0.12);
+    --accent-dim2: rgba(200,241,53,0.06);
+    --text: #e8e8e8;
+    --muted: #666;
+    --muted2: #444;
+    --danger: #ff5f5f;
+    --danger-dim: rgba(255,95,95,0.1);
+    --success: #5fffa0;
+    --success-dim: rgba(95,255,160,0.1);
+    --mono: 'IBM Plex Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header {
+    padding: 40px 0 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+
+  .logo span { color: var(--accent); }
+
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted2);
+    transition: background 0.3s;
+  }
+  .dot.online { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 2s ease infinite; }
+  .dot.offline { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Main */
+  main {
+    padding: 40px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Mode toggle */
+  .mode-bar {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    animation: fadeUp 0.5s 0.1s ease both;
+  }
+
+  .mode-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .mode-btn::before {
+    content: attr(data-icon);
+    margin-right: 8px;
+    font-size: 14px;
+    vertical-align: -1px;
+  }
+
+  .mode-btn:hover { color: var(--text); background: var(--surface2); }
+
+  .mode-btn.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    transition: border-color 0.2s;
+    animation: fadeUp 0.5s ease both;
+  }
+  .card:nth-child(2) { animation-delay: 0.15s; }
+  .card:nth-child(3) { animation-delay: 0.2s; }
+  .card:nth-child(4) { animation-delay: 0.25s; }
+  .card:hover { border-color: var(--border-hover); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .card-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Field */
+  .field-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  input[type="text"],
+  input[type="password"],
+  textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    resize: none;
+  }
+
+  input:focus, textarea:focus {
+    border-color: rgba(200,241,53,0.3);
+    box-shadow: 0 0 0 3px rgba(200,241,53,0.06);
+  }
+
+  textarea { min-height: 110px; line-height: 1.7; }
+
+  /* Strength bar */
+  .strength-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .strength-track {
+    flex: 1;
+    height: 3px;
+    background: var(--surface2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .strength-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 2px;
+    transition: width 0.4s ease, background 0.4s;
+  }
+
+  .strength-label {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* Buttons */
+  .btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn:hover { border-color: var(--border-hover); color: var(--text); background: var(--surface2); }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0a0a0b;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 13px;
+    border-radius: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-family: var(--mono);
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0);
+    transition: background 0.15s;
+  }
+
+  .btn-primary:hover::after { background: rgba(0,0,0,0.1); }
+  .btn-primary:active { transform: scale(0.99); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Output */
+  .output-wrap {
+    position: relative;
+  }
+
+  .output-wrap textarea {
+    padding-right: 90px;
+    color: var(--accent);
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+  .copy-btn:hover { border-color: var(--border-hover); color: var(--text); }
+
+  /* Alert */
+  .alert {
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    display: none;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  .alert.error { background: var(--danger-dim); border: 1px solid rgba(255,95,95,0.2); color: var(--danger); display: block; }
+  .alert.success { background: var(--success-dim); border: 1px solid rgba(95,255,160,0.2); color: var(--success); display: block; }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-top-color: #0a0a0b;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Footer */
+  footer {
+    padding: 20px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    animation: fadeUp 0.5s 0.3s ease both;
+  }
+
+  .algo-badge {
+    background: var(--accent-dim2);
+    border: 1px solid rgba(200,241,53,0.15);
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    border-radius: 99px;
+    text-transform: uppercase;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Divider */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--muted2);
+    letter-spacing: 0.06em;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header>
+    <div class="logo">ci<span>ph</span>er</div>
+    <div class="status-dot">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">checking api…</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Mode toggle -->
+    <div class="mode-bar">
+      <button class="mode-btn active" data-icon="🔒" data-mode="encrypt" onclick="setMode('encrypt')">Encrypt</button>
+      <button class="mode-btn" data-icon="🔓" data-mode="decrypt" onclick="setMode('decrypt')">Decrypt</button>
+    </div>
+
+    <!-- Passphrase -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-label">Passphrase</span>
+        <span class="card-meta" id="charCount">0 chars</span>
+      </div>
+      <div class="field-group">
+        <input type="password" id="passphrase" placeholder="Enter your secret passphrase…" autocomplete="off" />
+        <button class="btn" onclick="togglePass()" id="toggleBtn">show</button>
+        <button class="btn" onclick="generatePass()">gen</button>
+      </div>
+      <div class="strength-row">
+        <div class="strength-track">
+          <div class="strength-fill" id="strengthFill"></div>
+        </div>
+        <span class="strength-label" id="strengthLabel">—</span>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-label" id="inputLabel">Plaintext</span>
+        <span class="card-meta" id="inputMeta"></span>
+      </div>
+      <textarea id="inputText" placeholder="Type or paste your text here…"></textarea>
+    </div>
+
+    <!-- Action -->
+    <button class="btn-primary" id="actionBtn" onclick="runAction()">
+      <span id="btnText">Encrypt</span>
+    </button>
+
+    <!-- Output -->
+    <div class="card" id="outputCard" style="display:none;">
+      <div class="card-header">
+        <span class="card-label" id="outputLabel">Ciphertext</span>
+        <span class="card-meta" id="outputMeta"></span>
+      </div>
+      <div id="alertBox"></div>
+      <div class="output-wrap" id="outputWrap" style="display:none;">
+        <textarea id="outputText" readonly></textarea>
+        <button class="copy-btn" onclick="copyOutput()" id="copyBtn">copy</button>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    <span>AES-256-CBC · PBKDF2-SHA256 · 100k iterations</span>
+    <span class="algo-badge">Flask API</span>
+  </footer>
+
+</div>
+
+<script>
+const API = '';  // Same origin — Flask serves this page
+
+let mode = 'encrypt';
+
+// ── API health check ──────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/health`);
+    const d = await r.json();
+    if (d.success) {
+      document.getElementById('statusDot').className = 'dot online';
+      document.getElementById('statusText').textContent = 'api online';
+    } else throw new Error();
+  } catch {
+    document.getElementById('statusDot').className = 'dot offline';
+    document.getElementById('statusText').textContent = 'api offline';
+  }
+}
+
+checkHealth();
+setInterval(checkHealth, 15000);
+
+// ── Mode ─────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === m);
+  });
+  document.getElementById('inputLabel').textContent = m === 'encrypt' ? 'Plaintext' : 'Ciphertext token';
+  document.getElementById('inputText').placeholder = m === 'encrypt'
+    ? 'Type or paste your text here…'
+    : 'Paste your encrypted token here…';
+  document.getElementById('btnText').textContent = m === 'encrypt' ? 'Encrypt' : 'Decrypt';
+  document.getElementById('outputCard').style.display = 'none';
+  document.getElementById('outputWrap').style.display = 'none';
+  document.getElementById('alertBox').innerHTML = '';
+  document.getElementById('inputText').value = '';
+}
+
+// ── Passphrase ────────────────────────────────────────────────────────────────
+function togglePass() {
+  const inp = document.getElementById('passphrase');
+  const btn = document.getElementById('toggleBtn');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? 'show' : 'hide';
+}
+
+function generatePass() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+  let p = '';
+  for (let i = 0; i < 20; i++) p += chars[Math.floor(Math.random() * chars.length)];
+  const inp = document.getElementById('passphrase');
+  inp.value = p;
+  inp.type = 'text';
+  document.getElementById('toggleBtn').textContent = 'hide';
+  updateStrength(p);
+  updateCharCount(p);
+}
+
+function updateStrength(p) {
+  let s = 0;
+  if (p.length >= 8) s++;
+  if (p.length >= 14) s++;
+  if (/[A-Z]/.test(p)) s++;
+  if (/[a-z]/.test(p)) s++;
+  if (/[0-9]/.test(p)) s++;
+  if (/[^A-Za-z0-9]/.test(p)) s++;
+  const pct = Math.round(s / 6 * 100);
+  const fill = document.getElementById('strengthFill');
+  const label = document.getElementById('strengthLabel');
+  fill.style.width = pct + '%';
+  if (s <= 2) { fill.style.background = '#ff5f5f'; label.textContent = 'weak'; label.style.color = '#ff5f5f'; }
+  else if (s <= 4) { fill.style.background = '#ffbe5f'; label.textContent = 'fair'; label.style.color = '#ffbe5f'; }
+  else { fill.style.background = '#c8f135'; label.textContent = 'strong'; label.style.color = '#c8f135'; }
+}
+
+function updateCharCount(p) {
+  document.getElementById('charCount').textContent = `${p.length} chars`;
+}
+
+document.getElementById('passphrase').addEventListener('input', e => {
+  updateStrength(e.target.value);
+  updateCharCount(e.target.value);
+});
+
+document.getElementById('inputText').addEventListener('input', e => {
+  const len = e.target.value.length;
+  document.getElementById('inputMeta').textContent = len ? `${len} chars` : '';
+});
+
+// ── Run ───────────────────────────────────────────────────────────────────────
+async function runAction() {
+  const passphrase = document.getElementById('passphrase').value.trim();
+  const inputText = document.getElementById('inputText').value.trim();
+  const btn = document.getElementById('actionBtn');
+  const btnText = document.getElementById('btnText');
+  const alertBox = document.getElementById('alertBox');
+  const outputCard = document.getElementById('outputCard');
+  const outputWrap = document.getElementById('outputWrap');
+
+  alertBox.innerHTML = '';
+  outputWrap.style.display = 'none';
+  outputCard.style.display = 'block';
+
+  if (!passphrase) { showAlert('Passphrase is required.', 'error'); return; }
+  if (passphrase.length < 8) { showAlert('Passphrase must be at least 8 characters.', 'error'); return; }
+  if (!inputText) { showAlert('Input text cannot be empty.', 'error'); return; }
+
+  btn.disabled = true;
+  btnText.innerHTML = `<span class="spinner"></span>${mode === 'encrypt' ? 'Encrypting…' : 'Decrypting…'}`;
+
+  try {
+    const endpoint = `${API}/${mode}`;
+    const body = mode === 'encrypt'
+      ? { text: inputText, passphrase }
+      : { token: inputText, passphrase };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      const result = mode === 'encrypt' ? data.token : data.text;
+      document.getElementById('outputText').value = result;
+      document.getElementById('outputLabel').textContent = mode === 'encrypt' ? 'Ciphertext token' : 'Decrypted text';
+      document.getElementById('outputMeta').textContent = `${result.length} chars`;
+      outputWrap.style.display = 'block';
+    } else {
+      showAlert(data.error || 'Something went wrong.', 'error');
+    }
+  } catch (err) {
+    showAlert('Could not reach the API. Is Flask running?', 'error');
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = mode === 'encrypt' ? 'Encrypt' : 'Decrypt';
+  }
+}
+
+function showAlert(msg, type) {
+  const alertBox = document.getElementById('alertBox');
+  alertBox.innerHTML = `<div class="alert ${type}">${msg}</div>`;
+  document.getElementById('outputCard').style.display = 'block';
+}
+
+async function copyOutput() {
+  const text = document.getElementById('outputText').value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'copied!';
+    btn.style.color = 'var(--accent)';
+    setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 1500);
+  } catch {}
+}
+</script>
+</body>
+</html>
